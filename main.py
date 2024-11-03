@@ -1,51 +1,51 @@
 from Crypto.Cipher import AES
-from Crypto.Hash import HMAC, SHA256
 from Crypto.Random import get_random_bytes
+from Crypto.Hash import HMAC, SHA256
 
 
-def E1(K,N,A,M):
+hash_key = get_random_bytes(16)  # for MAC
+
+def encrypt(K, A, M):  # N is generated ltr
+    # the making of C
     cipher = AES.new(K, AES.MODE_CTR)
-    C = cipher.encrypt(M)
-    return C
+    ct_bytes = cipher.encrypt(M)  # ct = b64encode(ct_bytes).decode('utf-8')
+    nonce = cipher.nonce  # nonce = b64encode(cipher.nonce).decode('utf-8')
 
-E2_key = get_random_bytes(16)
-def E2(K,N,A,M):
-    hmac = HMAC.new(E2_key, digestmod=SHA256)
-    tag = hmac.update(K+N+A+M).digest()
-    return tag
+    # the making of T
+    T = HMAC.new(hash_key, nonce+AD+ct_bytes, digestmod=SHA256).digest()
 
-H_key = get_random_bytes(16)
-def H(K,N,A,T):
-    hmac = HMAC.new(H_key, digestmod=SHA256)
-    tag = hmac.update(K+N+A+T).digest()
-    return tag
-def D1(K,N,A,C):
-    cipher = AES.new(K, AES.MODE_CTR, nonce=N)
-    return cipher.decrypt(C)
-def CTXenc(K, N, A, M):
-    C = E1(K, N, A, M)
-    T = E2(K,N,A,M)
-    T1 = H(K,N,A,T)
-    return (C,T1)
-# (C,T1) is sent together with N and AD. The other party should already know K, E1_key and H_key
+    return (ct_bytes, T), AD, nonce
 
-def CTXdec(K,N,A,C_T1):
-    C,T1=C_T1
-    M = D1(K, N, A, C)
-    T = E2(K, N, A, M)
-    T2 = H(K, N, A, T)
-    if T2 != T1:
-        print(T2)
-        print(T1)
-        return ValueError
-    else: return M
+# encrypting
+AD = b"AD"
+message = b"secret"
+enc_key = get_random_bytes(16)
 
-K = get_random_bytes(16)  # key
-cipher = AES.new(K, AES.MODE_CTR)
-N = cipher.nonce
-A = 'associated data'.encode()
-M = 'secret data to transmit'.encode()  # message
+result = encrypt(enc_key, AD, message)
+print(result)
 
 
-lump = CTXenc(K,N,A,M)
-print(CTXdec(K,N,A,lump))
+def decrypt(K,N,A,C):
+    # check T
+    check = HMAC.new(hash_key, N+A+C, digestmod=SHA256)
+    check.verify(T_expected)
+
+    # get message
+    cipher = AES.new(K, AES.MODE_CTR,nonce=N)
+    plaintext = cipher.decrypt(C)
+    return plaintext
+
+# decrypting
+K = enc_key
+N = result[2]
+C = result[0][0]
+T_expected = result[0][1]
+
+message_produced = decrypt(K,N,AD,C)
+print(message_produced)
+
+
+# making the MAC check fail
+print("--------------- tripping it --------------")
+C = b"wrong ciphertext"
+decrypt(K,N,AD,C)
