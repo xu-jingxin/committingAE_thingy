@@ -1,0 +1,7 @@
+A note on decryptor and queryer:
+
+pycryptodome only outputs (and takes as input) bytes/bytearrays which cannot be sent over json so I made it into a hex string. 
+(_bytes_.hex() converts _bytes_ of type bytes into a hexadecimal string and bytes.fromhex(_string_) converts the hexadecimal string _string_ into bytes
+
+
+Also idk what should the mac-check fail signal be. Like throw a 400 bad request or just not do anything and let the return be a 500 server error. or send back a nice message saying "mac check failed"
