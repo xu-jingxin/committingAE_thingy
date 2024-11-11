@@ -5,3 +5,10 @@ pycryptodome only outputs (and takes as input) bytes/bytearrays which cannot be 
 
 
 Also idk what should the mac-check fail signal be. Like throw a 400 bad request or just not do anything and let the return be a 500 server error. or send back a nice message saying "mac check failed"
+
+
+the key is just copy-pasted to be the same across decryptor and queryer
+
+
+if queryer doesn't work just dump this in the url:
+{'nonce': '457ae640d0e9320354e200', 'header': '686561646572', 'ciphertext': '11470f3fb54a', 'tag': '9fe5445c2d0e5f169a2985e1fcb347c6'}
