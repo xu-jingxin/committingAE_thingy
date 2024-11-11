@@ -18,7 +18,7 @@ def decrypt():
         plaintext = cipher.decrypt_and_verify(ciphertext,tag)
         return {'pt':plaintext.hex()}
     except:
-        return "MAC check failed",400
+        return "MAC check failed"
 
 
 if __name__ == "__main__":
