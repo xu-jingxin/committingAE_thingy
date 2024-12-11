@@ -1,0 +1,90 @@
+
+'''Key: 32 byte (256-bit)
+Nonce: 12-byte (96-bit)
+r and s: 16 bytes each (128 bits)
+
+Pure chacha block cipher (which produces the key stream):
+input 16-bytes (128-bits: 64 bits each for nonce and counter)
+--- but nonce is 12 bytes?
+and outputs 64-bytes (512-bits)
+
+'''
+
+from Crypto.Hash.Poly1305 import Poly1305_MAC
+from Crypto.Random import get_random_bytes
+from Crypto.Cipher import ChaCha20
+from Crypto.Util.number import inverse
+
+
+'''From Appendix B of J. Len (2020) Partitioning oracle attacks.'''
+
+print(len(bytes.fromhex('abcdef')))
+
+K1 = b'\xf0(VF\xeflm\xbe\xa4\xe6\x08c\xc0z\x90#N\n\xa4\xc6\xd9\x90\xc0\xec\xa8\xa5WCq8o\x1a'
+K2 = b'\x1fJ\x08\xcf\xc7\xcd\xb79\x87\x9c~\x19\xbe\x18H\x0f\xa1)2\xdc\xaep\xb4\xcd\xa0\n>\xdb\xfaN\xea\x0b'
+#  ^^ result of get_random_bytes(32)
+assert len(K1) == 32
+assert len(K2) == 32
+
+p = 2**130 - 5
+
+
+def calculate_values(key, nonce): # returns r, s, r-squared
+    cipher = ChaCha20.new(key=key, nonce=nonce)
+    B0 = int.to_bytes(0, length=32, byteorder='little')
+
+    # in order to get just the keystream, which comes from Ek(0000||nonce)
+    rs = cipher.encrypt(B0)  # Xor ing B0 with the key stream
+    r, s = rs[:16], rs[16:32]
+    assert len(r) == 16
+    assert len(s) == 16
+    def clamp(r: bytes):
+        r_c = bytearray(r)
+        r_c[3] &= 15
+        r_c[7] &= 15
+        r_c[11] &= 15
+        r_c[15] &= 15
+        r_c[4] &= 252
+        r_c[8] &= 252
+        r_c[12] &= 252
+        return r_c
+
+    r = clamp(r)
+
+    r, s = int.from_bytes(r, byteorder='little'), int.from_bytes(s, byteorder='little')
+    r_sq = r**2
+    return r, s, r_sq  #  both smaller than p, r1_sq larger
+
+
+def get_Xl():
+    #  for the basic case of no AD and 1 block / 16-byte ciphertext
+    Xl_1 = int.to_bytes(0, length=8, byteorder='little')  #  encode-8(|AD|) = encode-8(|0|)
+    Xl_2 = int.to_bytes(16, length=8, byteorder='little')  #  encode-8(|M|) = encode-8(|16|)
+    Xl_3 = int.to_bytes(1, length=1, byteorder='little')  # because Xl is L||encode-1(1)
+    Xl = Xl_1 + Xl_2 + Xl_3
+    Xl = int.from_bytes(Xl)
+    return Xl
+
+N = get_random_bytes(12)
+
+r1, s1, r1_sq = calculate_values(K1, N)
+# print(r1, s1, r1_sq)
+r2, s2, r2_sq = calculate_values(K2, N)
+# print(r2, s2, r2_sq)
+
+rhs = (s2 - s1) % (2**128)
+# print(rhs)
+
+Xl = get_Xl()
+
+r1_r2_sq_inverse = inverse(r2_sq - r1_sq, p)
+
+X0 = ((rhs - Xl * (r1-r2)) * r1_r2_sq_inverse) % p
+X0 = X0.to_bytes(length=17)
+
+
+poly = Poly1305_MAC(int.to_bytes(r1, length=16), int.to_bytes(r1, length=16), X0)
+print(poly.hexdigest())
+poly = Poly1305_MAC(int.to_bytes(r2, length=16), int.to_bytes(s2, length=16), X0)
+print(poly.hexdigest())
+#  nope it does not work.
